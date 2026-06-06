@@ -717,12 +717,17 @@ function renderWordDetails(w) {
 
   <div class="card">
     <div class="dl">📝 Приклади речень</div>
-    ${(w.sentences||[]).map(s => {
+    ${(w.sentences||[]).map((s, i) => {
       const en = typeof s === 'object' ? s.en : s;
       const ua = typeof s === 'object' ? s.ua : '';
+      const uid = `tr_${w.id||'x'}_${i}`;
       return `<div class="si" style="font-style:normal;margin-bottom:8px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px">${esc(en)}</div>
-        ${ua?`<div style="font-size:12px;color:var(--text3)">${esc(ua)}</div>`:''}
+        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:5px">${esc(en)}</div>
+        ${ua?`<div id="${uid}" style="display:none;font-size:12px;color:var(--text3)">${esc(ua)}</div>
+        <div onclick="document.getElementById('${uid}').style.display='block';this.style.display='none'"
+          style="font-size:12px;color:var(--text3);cursor:pointer;user-select:none">
+          👁 показати переклад
+        </div>`:''}
       </div>`;
     }).join('')}
   </div>
