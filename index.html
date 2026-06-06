@@ -321,6 +321,7 @@ async function addWord(d) {
     partOfSpeech: d.partOfSpeech||'слово', forms: d.forms||'',
     sentences: Array.isArray(d.sentences)?d.sentences:[d.sentences||''],
     grammarTip: d.grammarTip||'',
+    type: d.type||'', level: d.level||'', style: d.style||'', meaning: d.meaning||'',
     transcription: d.transcription||'', ukrainianReading: d.ukrainianReading||'',
     phrases: Array.isArray(d.phrases)?d.phrases:[],
     synonyms: d.synonyms||'', antonyms: d.antonyms||'',
@@ -392,24 +393,31 @@ async function callGemini(prompt) {
 }
 
 async function analyzeWord(word) {
-  return callGemini(`Analyze the English word "${word}" for a Ukrainian beginner (A1-A2 level).
-If the word is misspelled, use the correct spelling and set correctedWord to the correct form.
+  return callGemini(`Analyze the English expression "${word}" for a Ukrainian learner.
+It can be a single word, phrasal verb, idiom, or set phrase — detect automatically.
+If misspelled, correct it.
+
 Return ONLY valid JSON:
 {
-  "correctedWord": "correct spelling of the word (same as input if already correct)",
+  "correctedWord": "correct form (same as input if correct)",
+  "type": "слово or фразове дієслово or ідіома or кліше or вираз",
   "translation": "main Ukrainian translation",
-  "partOfSpeech": "іменник or дієслово or прикметник or прислівник or інше",
-  "forms": "word forms e.g. go/goes/went/gone or cat/cats or big/bigger/biggest",
-  "transcription": "IPA transcription e.g. /ˈæp.əl/",
-  "ukrainianReading": "how to read in Ukrainian letters e.g. 'епл",
+  "meaning": "short explanation in Ukrainian what it means (1 sentence, especially useful for idioms/phrasal verbs)",
+  "partOfSpeech": "іменник or дієслово or прикметник or прислівник or фраза or інше",
+  "level": "A1 or A2 or B1 or B2 or C1",
+  "style": "нейтральне or розмовне or формальне or сленг or книжне",
+  "forms": "word/phrase forms as a string, or empty if not applicable",
+  "transcription": "IPA transcription",
+  "ukrainianReading": "how to read in Ukrainian letters",
   "sentences": [
-    {"en": "simple A1 English sentence", "ua": "Ukrainian translation of that sentence"},
-    {"en": "another simple A1 sentence", "ua": "Ukrainian translation"}
+    {"en": "natural example sentence", "ua": "Ukrainian translation"},
+    {"en": "another example sentence", "ua": "Ukrainian translation"},
+    {"en": "third example sentence", "ua": "Ukrainian translation"}
   ],
-  "phrases": ["common phrase or collocation 1", "common phrase or collocation 2", "common phrase or collocation 3"],
-  "synonyms": "2-3 synonyms separated by comma, or empty string if none",
-  "antonyms": "2-3 antonyms separated by comma, or empty string if none",
-  "grammarTip": "one short practical grammar tip in Ukrainian"
+  "phrases": ["phrase with Ukrainian translation in brackets", "phrase 2 (переклад)", "phrase 3 (переклад)"],
+  "synonyms": "2-3 synonyms or similar expressions, comma separated, or empty string",
+  "antonyms": "2-3 antonyms or opposites, comma separated, or empty string",
+  "grammarTip": "practical grammar or usage tip in Ukrainian"
 }`);
 }
 
@@ -698,7 +706,10 @@ function wordItem(w) {
         ? `<div style="font-size:12px;color:var(--yellow)">⚡ не проаналізовано</div>`
         : `<div style="font-size:13px;color:var(--text3);font-weight:400">${esc(w.translation)}</div>`}
     </div>
-    <span class="tag" style="flex-shrink:0;font-size:11px">${esc(w.partOfSpeech||'⚡')}</span>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+      <span class="tag" style="font-size:11px">${esc(w.partOfSpeech||'⚡')}</span>
+      ${w.level?`<span style="font-size:10px;color:var(--green);font-weight:700">${esc(w.level)}</span>`:''}
+    </div>
   </div>`;
 }
 
@@ -708,6 +719,12 @@ function renderWordDetails(w) {
   <div class="card" style="text-align:center;padding:14px">
     ${w.transcription?`<div style="font-size:20px;color:var(--acl);letter-spacing:1px;margin-bottom:6px">${esc(w.transcription)}</div>`:''}
     ${w.ukrainianReading?`<div style="font-size:15px;color:var(--text2)">читається: <b style="color:var(--text)">${esc(w.ukrainianReading)}</b></div>`:''}
+  </div>` : ''}
+
+  ${w.meaning ? `
+  <div class="card" style="border-left:3px solid var(--yellow)">
+    <div class="dl">💬 Що означає</div>
+    <div class="dc" style="line-height:1.7">${esc(w.meaning)}</div>
   </div>` : ''}
 
   <div class="card card-ac">
@@ -766,8 +783,13 @@ function renderResult(d) {
   <div class="card">
     <div style="text-align:center;margin-bottom:14px">
       <div style="font-size:28px;font-weight:800;color:#fff;margin-bottom:5px">${esc(d.correctedWord||d.word)}</div>
-      <div style="font-size:20px;color:var(--acl);margin-bottom:8px">${esc(d.translation)}</div>
-      <span class="tag">${esc(d.partOfSpeech)}</span>
+      <div style="font-size:20px;color:var(--acl);margin-bottom:10px">${esc(d.translation)}</div>
+      <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+        ${d.partOfSpeech?`<span class="tag">${esc(d.partOfSpeech)}</span>`:''}
+        ${d.type&&d.type!=='слово'?`<span class="tag" style="background:rgba(124,111,245,.25);color:var(--acl)">${esc(d.type)}</span>`:''}
+        ${d.level?`<span class="tag" style="background:rgba(82,214,138,.15);color:var(--green)">${esc(d.level)}</span>`:''}
+        ${d.style&&d.style!=='нейтральне'?`<span class="tag" style="background:rgba(255,107,138,.15);color:var(--pink)">${esc(d.style)}</span>`:''}
+      </div>
     </div>
   </div>
   ${renderWordDetails(d)}
