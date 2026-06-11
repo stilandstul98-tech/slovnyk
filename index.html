@@ -249,7 +249,7 @@ const CACHE_KEY = 'vw3';
 const IVLS = [1,3,7,14,30,60];
 
 function gs() {
-  const d = {apiKey:'', sheetsUrl:'', reviewMode:'EN→UA', oxfordId:'', oxfordKey:''};
+  const d = {apiKey:'', sheetsUrl:'', reviewMode:'EN→UA'};
   try { return {...d,...JSON.parse(localStorage.getItem(SK))}; }
   catch { return d; }
 }
@@ -390,39 +390,6 @@ async function callGemini(prompt) {
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Порожня відповідь від AI');
   return JSON.parse(text);
-}
-
-async function fetchOxford(word) {
-  const s = gs();
-  if (!s.oxfordId || !s.oxfordKey) return null;
-  // Oxford API не підтримує CORS з браузера напряму для file://
-  // Використовуємо тільки перше слово (Oxford не підтримує фрази добре)
-  const w = word.split(' ')[0].toLowerCase();
-  try {
-    const res = await fetch(
-      `https://od-api.oxforddictionaries.com/api/v2/entries/en-gb/${encodeURIComponent(w)}?fields=pronunciations,definitions,inflections`,
-      { headers: { app_id: s.oxfordId, app_key: s.oxfordKey } }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const entry = data.results?.[0]?.lexicalEntries?.[0];
-    if (!entry) return null;
-
-    // транскрипція
-    const pron = entry.pronunciations?.find(p => p.phoneticNotation === 'IPA');
-    const transcription = pron ? `/${pron.phoneticSpelling}/` : null;
-
-    // аудіо
-    const audio = entry.pronunciations?.find(p => p.audioFile)?.audioFile || null;
-
-    // визначення
-    const def = entry.entries?.[0]?.senses?.[0]?.definitions?.[0] || null;
-
-    // форми
-    const inflections = entry.inflections?.map(i => i.inflectedForm).join(' / ') || null;
-
-    return { transcription, audio, definition: def, inflections };
-  } catch(e) { return null; }
 }
 
 async function analyzeWord(word) {
@@ -651,18 +618,6 @@ settings() {
   </div>
 
   <div class="card">
-    <div class="st">📖 Oxford Dictionary API ${s.oxfordId?'<span style="color:var(--green)">● підключено</span>':'<span style="color:var(--text3)">● не підключено</span>'}</div>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:11px">
-      Додає офіційну вимову 🔊 і визначення. Якщо не підключено — всe працює без нього.<br>
-      Ключ на <b style="color:var(--acl)">developer.oxforddictionaries.com</b>
-    </p>
-    <input type="password" id="oxid" placeholder="App ID…" value="${esc(s.oxfordId||'')}" autocomplete="off" spellcheck="false" style="margin-bottom:8px">
-    <input type="password" id="oxkey" placeholder="App Key…" value="${esc(s.oxfordKey||'')}" autocomplete="off" spellcheck="false" style="margin-bottom:9px">
-    <button class="btn bp bsm" style="width:auto;padding:10px 18px" onclick="saveOxford()">Зберегти</button>
-    ${s.oxfordId?`<button class="btn bsm" style="background:var(--bg3);color:var(--red);width:auto;padding:10px 14px;margin-left:8px" onclick="clearOxford()">Видалити</button>`:''}
-  </div>
-
-  <div class="card">
     <div class="st">📊 Google Таблиця ${connected?'<span style="color:var(--green)">● підключено</span>':'<span style="color:var(--text3)">● не підключено</span>'}</div>
     ${connected?`<div class="info-box green" style="margin-bottom:11px">✓ Слова зберігаються у твоїй Google Таблиці</div>`:''}
 
@@ -766,26 +721,10 @@ function renderWordDetails(w) {
     ${w.ukrainianReading?`<div style="font-size:15px;color:var(--text2)">читається: <b style="color:var(--text)">${esc(w.ukrainianReading)}</b></div>`:''}
   </div>` : ''}
 
-  ${w.audio ? `
-  <div style="text-align:center;margin-bottom:11px">
-    <button onclick="new Audio('${esc(w.audio)}').play()"
-      style="background:var(--bg3);border:none;border-radius:100px;padding:10px 20px;
-      color:var(--text);font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:7px">
-      🔊 Послухати вимову
-      ${w.oxfordUsed?`<span style="font-size:10px;color:var(--text3)">Oxford</span>`:''}
-    </button>
-  </div>` : ''}
-
   ${w.meaning ? `
   <div class="card" style="border-left:3px solid var(--yellow)">
     <div class="dl">💬 Що означає</div>
     <div class="dc" style="line-height:1.7">${esc(w.meaning)}</div>
-  </div>` : ''}
-
-  ${w.oxDefinition ? `
-  <div class="card" style="border-left:3px solid var(--blue)">
-    <div class="dl">📖 Oxford: визначення (EN)</div>
-    <div class="dc" style="line-height:1.7;font-style:italic">${esc(w.oxDefinition)}</div>
   </div>` : ''}
 
   <div class="card card-ac">
@@ -872,30 +811,8 @@ function getWordInput() {
 async function doAdd() {
   const word = getWordInput(); if(!word)return;
   addLoading=true; render();
-  try {
-    // запускаємо обидва API паралельно
-    const [gemini, oxford] = await Promise.allSettled([
-      analyzeWord(word),
-      fetchOxford(word)
-    ]);
-
-    if (gemini.status === 'rejected') throw new Error(gemini.reason?.message || 'Gemini недоступний');
-
-    const d = gemini.value;
-    d.word = word;
-
-    // додаємо дані Oxford якщо є
-    if (oxford.status === 'fulfilled' && oxford.value) {
-      const ox = oxford.value;
-      if (ox.transcription) d.transcription = ox.transcription;
-      if (ox.audio) d.audio = ox.audio;
-      if (ox.definition) d.oxDefinition = ox.definition;
-      if (ox.inflections && !d.forms) d.forms = ox.inflections;
-      d.oxfordUsed = true;
-    }
-
-    pendWord = d;
-  } catch(e) { toast('❌ '+e.message); }
+  try { const d=await analyzeWord(word); d.word=word; pendWord=d; }
+  catch(e) { toast('❌ '+e.message); }
   addLoading=false; render();
 }
 
@@ -1194,20 +1111,6 @@ function saveKey() {
   const i=document.getElementById('aki'); if(!i)return;
   const s=gs(); s.apiKey=i.value.trim(); ss(s);
   toast(s.apiKey?'✓ Ключ збережено!':'Ключ видалено');
-}
-
-function saveOxford() {
-  const id=document.getElementById('oxid');
-  const key=document.getElementById('oxkey');
-  if(!id||!key)return;
-  const s=gs(); s.oxfordId=id.value.trim(); s.oxfordKey=key.value.trim(); ss(s);
-  toast(s.oxfordId?'✓ Oxford підключено!':'Oxford видалено');
-  render();
-}
-
-function clearOxford() {
-  const s=gs(); s.oxfordId=''; s.oxfordKey=''; ss(s);
-  toast('Oxford відключено'); render();
 }
 
 async function saveSheetsUrl() {
